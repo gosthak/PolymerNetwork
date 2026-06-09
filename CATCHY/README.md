@@ -3,7 +3,6 @@
 
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/)
 [![OpenMM 8](https://img.shields.io/badge/OpenMM-8.x-green.svg)](https://openmm.org/)
-[![ANR funded](https://img.shields.io/badge/funded-ANR-red.svg)](https://anr.fr/)
 
 ---
 
@@ -176,11 +175,3 @@ output/
     ├── fig_F_survival.pdf
     └── fig_G_enhancement.pdf
 ```
-
----
-
-## Contacts
-
-Virginie Hugouvieux — virginie.hugouvieux@inrae.fr  
-Xavier Frank — xavier.frank@inrae.fr  
-IATE lab, Université de Montpellier / INRAE
