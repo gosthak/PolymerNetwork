@@ -1,0 +1,31 @@
+# Weak confinement regime: C ≲ 1
+# σ_E small relative to λ=2.01 → enzymes diffuse almost freely
+# Use repulsive interaction to match Paper 1 RNP regime
+
+system:
+  N_m: 8000
+  rho_m0: 0.290
+  c: 0.1
+  mean_strand: 6
+  seed: 42
+
+enzyme:
+  sigma_list: [1.0, 1.5, 2.0]   # C ≈ 0.50, 0.75, 1.00
+  phi_E: 0.02
+  interaction: repulsive
+  k_cat: 0.005
+  r_cleave: 1.5
+
+simulation:
+  T: 1.0
+  dt: 0.006
+  gamma_m: 0.1
+  n_equil_network: 500000
+  n_npt_network: 200000
+  n_equil_enzyme: 300000
+  n_production: 2000000        # shorter — converges fast
+  save_interval: 500
+  platform: CUDA
+
+output:
+  dir: ../output/weak

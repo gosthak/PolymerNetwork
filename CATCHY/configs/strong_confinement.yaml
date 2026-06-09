@@ -1,0 +1,30 @@
+# Strong confinement: 1 ≲ C ≲ 3  (hopping regime)
+# Attractive interaction → smaller effective diameter → easier to study crossover
+
+system:
+  N_m: 8000
+  rho_m0: 0.290           # λ = 2.01
+  c: 0.1
+  mean_strand: 6
+  seed: 42
+
+enzyme:
+  sigma_list: [2.5, 3.0, 4.0, 5.0]   # C ≈ 1.24, 1.49, 1.99, 2.49
+  phi_E: 0.02
+  interaction: attractive
+  k_cat: 0.005
+  r_cleave: 1.5
+
+simulation:
+  T: 1.0
+  dt: 0.006
+  gamma_m: 0.1
+  n_equil_network: 500000
+  n_npt_network: 200000
+  n_equil_enzyme: 300000
+  n_production: 3000000
+  save_interval: 1000
+  platform: CUDA
+
+output:
+  dir: ../output/strong

@@ -1,0 +1,31 @@
+# CATCHY — default configuration
+# N_m=8000, rho=0.290, sigma_E=[1–5], both active and passive runs
+# Expected runtime: 5–7 days on a single GPU
+
+system:
+  N_m: 8000               # number of monomers
+  rho_m0: 0.290           # monomer number density (LJ units)
+  c: 0.1                  # cross-link fraction of monomers
+  mean_strand: 6          # <n> for Flory-Stockmayer distribution
+  seed: 42
+
+enzyme:
+  sigma_list: [1.0, 2.0, 3.0, 4.0, 5.0]  # enzyme diameters → C ≈ 0.50,1.00,1.49,1.99,2.49
+  phi_E: 0.02             # enzyme volume fraction (≈ few enzymes in box)
+  interaction: attractive  # attractive or repulsive
+  k_cat: 0.005            # cleavage probability per timestep per enzyme-bond contact
+  r_cleave: 1.5           # cleavage radius in units of sigma_E
+
+simulation:
+  T: 1.0                  # temperature (kBT = 1)
+  dt: 0.006               # timestep (LJ units, Paper 1 value)
+  gamma_m: 0.1            # monomer Langevin friction
+  n_equil_network: 500000  # network equilibration steps
+  n_npt_network: 200000    # NPT pressure equilibration steps
+  n_equil_enzyme: 300000   # enzyme push-off + equilibration steps
+  n_production: 3000000    # production steps
+  save_interval: 1000      # frames saved every N steps
+  platform: CUDA          # CUDA / OpenCL / CPU
+
+output:
+  dir: ../output
