@@ -20,8 +20,8 @@ simulation:
   dt: 0.006
   gamma_m: 0.1
   n_equil_network: 500000
-  n_npt_network: 200000
-  n_equil_enzyme: 300000
+  n_npt_enzyme: 50000    # NPT after enzyme insertion (P*=0, restore rho_m0)
+  n_equil_enzyme: 300000   # NVT after NPT
   n_production: 3000000
   save_interval: 1000
   platform: CUDA
