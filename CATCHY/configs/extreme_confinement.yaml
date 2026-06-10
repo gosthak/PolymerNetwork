@@ -21,7 +21,6 @@ simulation:
   dt: 0.004              # smaller dt for stability at high density
   gamma_m: 0.1
   n_equil_network: 800000   # longer equilibration at high density
-  n_npt_network: 300000
   n_equil_enzyme: 500000
   n_production: 5000000     # longer production — D very small
   save_interval: 2000
