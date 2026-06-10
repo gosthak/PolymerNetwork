@@ -121,13 +121,40 @@ def main():
         enz_sys.simulation.context.setVelocitiesToTemperature(T)
 
         # ------------------------------------------------------------------
-        # Soft push-off: run with reduced epsilon to relax enzyme overlaps
+        # Soft push-off: energy minimization to remove enzyme overlaps
         # ------------------------------------------------------------------
         print("  Soft push-off minimization ...")
         enz_sys.minimize(max_iter=5000)
+        enz_sys.simulation.context.setVelocitiesToTemperature(T)
 
         # ------------------------------------------------------------------
-        # NVT equilibration with enzymes
+        # NPT equilibration — let the box relax back to P*=0 after enzyme
+        # insertion. Enzymes add volume that pushes pressure up; NPT
+        # restores the network to its target density rho_m0.
+        # We use a short NPT (~50k steps) then switch to NVT for production.
+        # ------------------------------------------------------------------
+        n_npt_enz = sim_cfg.get("n_npt_enzyme", 50000)
+        print(f"  NPT equilibration ({n_npt_enz} steps, P*=0) ...")
+
+        # MonteCarloBarostat at P=0 bar (= P*=0 in our LJ mapping)
+        barostat = mm.MonteCarloBarostat(0.0, T, 25)
+        enz_sys.system.addForce(barostat)
+        enz_sys.simulation.context.reinitialize(preserveState=True)
+
+        reporter_npt = mm.app.StateDataReporter(
+            os.path.join(out_dir, f"npt_{label}.log"), 5000,
+            step=True, potentialEnergy=True, volume=True, density=True
+        )
+        enz_sys.simulation.reporters.append(reporter_npt)
+        enz_sys.run(n_npt_enz)
+        enz_sys.simulation.reporters.clear()
+
+        # Remove barostat — switch to NVT for the rest
+        enz_sys.system.removeForce(enz_sys.system.getNumForces() - 1)
+        enz_sys.simulation.context.reinitialize(preserveState=True)
+
+        # ------------------------------------------------------------------
+        # NVT equilibration with enzymes (fixed box from here on)
         # ------------------------------------------------------------------
         print(f"  NVT equilibration ({n_equil_enz} steps) ...")
         reporter = mm.app.StateDataReporter(
