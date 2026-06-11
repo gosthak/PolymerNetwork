@@ -118,7 +118,7 @@ class CleavageManager:
             for fi in bonds_to_cleave:
                 p1, p2, params = self.fene_force.getBondParameters(fi)
                 # Set k_bond = 0 (disable force without removing bond)
-                self.fene_force.setBondParameters(fi, p1, p2, [0.0, params[1]])
+                self.fene_force.setBondParameters(fi, p1, p2, [0.0])
                 self.active_bonds.discard(fi)
 
             self.fene_force.updateParametersInContext(context)

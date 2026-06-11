@@ -75,22 +75,30 @@ def add_wca_monomers_only(system, n_monomers, sigma_m=SIGMA_M, epsilon_m=EPSILON
     """
     WCA between monomer pairs only (indices 0..n_monomers-1).
     Enzyme pairs are excluded and handled by add_expanded_lj.
-    """
-    wca = CustomNonbondedForce(
-        "step(rc - r) * (4*eps*((s/r)^12 - (s/r)^6) + eps);"
-        "eps = sqrt(eps1*eps2);"
-        "s = 0.5*(sigma1+sigma2);"
-        "rc = 2^(1.0/6.0)*s;"
-    )
-    wca.addPerParticleParameter("sigma")
-    wca.addPerParticleParameter("eps")
-    wca.setNonbondedMethod(CustomNonbondedForce.CutoffPeriodic)
-    wca.setCutoffDistance(2.0 ** (1.0 / 6.0) * sigma_m * 1.05)
 
-    # Monomer particles
+    All monomers have identical sigma_m and epsilon_m, so we inline the
+    constants directly into the energy expression — no per-particle
+    parameters needed, and no undefined-variable errors in OpenMM.
+
+    U_WCA(r) = 4*eps*[(s/r)^12 - (s/r)^6] + eps   for r < 2^(1/6)*s
+             = 0                                     otherwise
+    with s = sigma_m (homonuclear pairs).
+    """
+    rc  = WCA_RC                          # = 2^(1/6) * sigma_m
+    eps = epsilon_m
+
+    energy_expr = (
+        f"step({rc:.10f} - r) * "
+        f"(4*{eps}*(({sigma_m}/r)^12 - ({sigma_m}/r)^6) + {eps})"
+    )
+
+    wca = CustomNonbondedForce(energy_expr)
+    wca.setNonbondedMethod(CustomNonbondedForce.CutoffPeriodic)
+    wca.setCutoffDistance(rc * 1.05)
+
     monomer_set = set(range(n_monomers))
     for i in range(n_monomers):
-        wca.addParticle([sigma_m, epsilon_m])
+        wca.addParticle([])
 
     wca.addInteractionGroup(monomer_set, monomer_set)
     system.addForce(wca)
@@ -110,12 +118,15 @@ def add_fene(system, bonds, k=FENE_K, r0=FENE_R0):
     ----------
     bonds : list[tuple(int,int)]  particle index pairs
     """
-    fene = CustomBondForce("0.5*k_bond*r0sq*(-log(1-(r/r0)^2)); r0sq=r0*r0")
+    # Energy: U = k_bond * (-0.5 * R0^2 * log(1 - (r/R0)^2))
+    # k_bond is per-bond (set to 0 for cleaved bonds by CleavageManager)
+    # R0 is fixed — inlined as a number to avoid parser issues
+    energy_expr = f"k_bond * (-0.5 * {r0*r0:.6f} * log(1 - (r/{r0:.6f})^2))"
+    fene = CustomBondForce(energy_expr)
     fene.addPerBondParameter("k_bond")
-    fene.addPerBondParameter("r0")
 
     for (i, j) in bonds:
-        fene.addBond(i, j, [k, r0])
+        fene.addBond(i, j, [k])
 
     system.addForce(fene)
     return fene
