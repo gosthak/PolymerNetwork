@@ -5,9 +5,10 @@
 Steps:
   1. Generate Kremer-Grest network with Flory-Stockmayer topology
   2. Minimize energy (push-off)
-  3. NVT equilibration
-  4. Measure cross-link dynamic localization length λ
-  5. Save network_data.npz + equilibrated checkpoint
+  3. NPT equilibration at target pressure (let box relax to rho_target)
+  4. NVT equilibration
+  5. Measure cross-link dynamic localization length λ
+  6. Save network_data.npz + equilibrated checkpoint
 
 Usage:
     python 01_build_network.py --config ../configs/default.yaml
@@ -136,7 +137,7 @@ def main():
     gamma_m = sim_cfg["gamma_m"]
     platform = sim_cfg["platform"]
     n_equil = sim_cfg["n_equil_network"]
-    n_npt = sim_cfg["n_npt_network"]
+    # NPT не используется при построении сети (бокс фиксирован)
 
     print("=" * 60)
     print("CATCHY — Step 01: Build and equilibrate network")
