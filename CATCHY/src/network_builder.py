@@ -1,77 +1,55 @@
 """
 Polymer network builder — Sorichetti et al. 2021 (Paper 1).
 
-Topology rules (strict):
-  - Cross-link beads:  exactly valence 3  (trivalent)
-  - Backbone monomers: exactly valence 2  (bivalent, chain interior)
-  - Chain ends connect to a cross-link to fill their valence
-
-No dangling ends: after topology construction every bead has degree ≥ 2,
-and chain-end beads are *merged* into cross-links so the final network
-contains only bivalent and trivalent nodes.
+Topology rules:
+  - Cross-link beads:  valence 3 (trivalent)
+  - Backbone monomers: valence 2 (bivalent)
+  - No dangling ends
+  - ALL bond lengths < R0 = 1.5 σ_m  (FENE constraint)
 
 Algorithm
 ─────────
-1. Place N_m beads randomly (lattice + jitter).
-2. Select N_cl = round(c * N_m) beads as cross-links.
-3. Build chains starting and ending at cross-links.
-   Each cross-link fires exactly 3 chain segments; each segment has a
-   Flory-Stockmayer length drawn from p(n) = (1/⟨n⟩)(1-1/⟨n⟩)^(n-1).
-4. Assign remaining unused beads greedily into segments that still need
-   more monomers.
-5. Verify: every bead has degree 2 (monomer) or 3 (cross-link).
-   No bead has degree 1 (dangling) or 0 (isolated).
-6. Expose: positions, bonds, crosslink_ids, backbone_bonds.
-
-All coordinates in reduced LJ units (σ_m = 1).
+1. Place N_m beads on a cubic lattice with spacing a < R0.
+2. Select N_cl = c*N_m cross-links randomly.
+3. Build chains by walking the lattice:
+     - Start each chain from a cross-link.
+     - Extend greedily to the nearest unvisited bead until
+       another cross-link is reached or the chain ends.
+     - Each cross-link fires 3 chains; each bivalent bead
+       is visited exactly once (valence 2).
+4. Prune dangling ends.
+5. Verify: no bond >= R0, no degree-1 beads.
 """
 
 import numpy as np
 from numpy.random import default_rng
 from collections import defaultdict
 
+FENE_R0 = 1.5
+
 
 class NetworkBuilder:
-    """
-    Build a permanently cross-linked, dangling-end-free polymer network.
-
-    Parameters
-    ----------
-    N_m        : int    total number of beads
-    rho        : float  number density
-    c          : float  fraction of beads that are cross-link sites (valence 3)
-    mean_strand: float  ⟨n⟩ for Flory-Stockmayer strand-length distribution
-    seed       : int
-    """
-
     def __init__(self, N_m=8000, rho=0.290, c=0.1, mean_strand=6, seed=42):
         self.N_m = N_m
         self.rho = rho
         self.c = c
         self.mean_strand = mean_strand
         self.rng = default_rng(seed)
-
         self.L = (N_m / rho) ** (1.0 / 3.0)
 
-        # Outputs (filled by build())
-        self.positions = None          # (N_m, 3)
-        self.backbone_bonds = []       # bonds between consecutive chain beads
-        self.crosslink_bonds = []      # bonds connecting chain ends to cross-links
-        self.crosslink_ids = []        # bead indices that are cross-link sites
-        self._degree = None            # (N_m,) int — valence of each bead
-
-    # ------------------------------------------------------------------ #
-    #  Public                                                              #
-    # ------------------------------------------------------------------ #
+        self.positions = None
+        self.backbone_bonds = []
+        self.crosslink_bonds = []
+        self.crosslink_ids = []
+        self._degree = None
+        self._cl_set = set()
 
     def build(self):
-        """
-        Run the full build pipeline and verify topology.
-        Returns self for chaining.
-        """
         self._place_beads()
         self._assign_crosslinks()
         self._build_topology()
+        self._prune_dangling()
+        self._unwrap_positions()
         self._verify()
         return self
 
@@ -85,6 +63,7 @@ class NetworkBuilder:
 
     def summary(self):
         deg = self._degree
+        bl = self._bond_lengths()
         print("NetworkBuilder summary")
         print(f"  N_m              = {self.N_m}")
         print(f"  rho              = {self.rho:.3f}   L = {self.L:.3f}")
@@ -94,35 +73,51 @@ class NetworkBuilder:
         print(f"  cross-link bonds = {len(self.crosslink_bonds)}")
         print(f"  total bonds      = {len(self.all_bonds)}")
         if deg is not None:
-            n2 = int((deg == 2).sum())
-            n3 = int((deg == 3).sum())
-            n1 = int((deg <= 1).sum())
-            print(f"  degree-2 beads   = {n2}  (backbone monomers)")
-            print(f"  degree-3 beads   = {n3}  (cross-links)")
-            print(f"  degree ≤1 beads  = {n1}  ← should be 0")
+            print(f"  degree-2 beads   = {int((deg==2).sum())}  (backbone monomers)")
+            print(f"  degree-3 beads   = {int((deg==3).sum())}  (cross-links)")
+            print(f"  degree ≤1 beads  = {int((deg<=1).sum())}  ← should be 0")
+        if bl is not None and len(bl) > 0:
+            print(f"  bond lengths     = min={bl.min():.3f}  "
+                  f"mean={bl.mean():.3f}  max={bl.max():.3f}  (R0={FENE_R0})")
+            print(f"  bonds >= R0      = {int((bl >= FENE_R0).sum())}  ← should be 0")
 
     # ------------------------------------------------------------------ #
-    #  Step 1 – place beads                                                #
+    #  Step 1: lattice placement                                           #
     # ------------------------------------------------------------------ #
 
     def _place_beads(self):
+        """
+        Standard cubic lattice with spacing a = L / n_side.
+
+        No wrapping tricks — points are strictly in [0, L) with
+        spacing a on all three axes. This guarantees:
+          - no duplicate positions under PBC
+          - nearest-neighbour distance = a (uniform, no surprises)
+
+        If a > R0 (very low density), the topology builder will still
+        find neighbours because we search up to r_bond_max > a.
+        The compression step in the script fixes any bonds > R0
+        before dynamics starts.
+        """
         n_side = int(np.ceil(self.N_m ** (1.0 / 3.0)))
-        a = self.L / n_side
+        a = self.L / n_side   # lattice spacing
+
         pts = []
         for ix in range(n_side):
             for iy in range(n_side):
                 for iz in range(n_side):
                     if len(pts) >= self.N_m:
                         break
-                    pts.append([(ix + 0.5) * a,
-                                 (iy + 0.5) * a,
-                                 (iz + 0.5) * a])
+                    pts.append([ix * a, iy * a, iz * a])
+
         pts = np.array(pts[:self.N_m], dtype=float)
-        pts += self.rng.uniform(-0.08 * a, 0.08 * a, pts.shape)
+        # Small jitter to break perfect symmetry — max 2% of spacing
+        pts += self.rng.uniform(-0.02 * a, 0.02 * a, pts.shape)
+        # Keep strictly inside box (jitter is tiny, this is a safeguard)
         self.positions = pts % self.L
 
     # ------------------------------------------------------------------ #
-    #  Step 2 – designate cross-link beads                                 #
+    #  Step 2: assign cross-links                                          #
     # ------------------------------------------------------------------ #
 
     def _assign_crosslinks(self):
@@ -133,197 +128,301 @@ class NetworkBuilder:
         self._cl_set = set(self.crosslink_ids)
 
     # ------------------------------------------------------------------ #
-    #  Step 3 – build topology                                             #
+    #  Step 3: build topology                                              #
     # ------------------------------------------------------------------ #
-
-    def _fs_length(self):
-        """Geometric draw: p(n)=(1/⟨n⟩)(1-1/⟨n⟩)^(n-1), minimum 1."""
-        return max(1, int(self.rng.geometric(1.0 / self.mean_strand)))
 
     def _build_topology(self):
         """
-        Construct a dangling-end-free network.
+        Build topology with unwrapped positions so bonded pairs are always
+        close WITHOUT PBC. Required by OpenMM CustomBondForce which does
+        not apply minimum image convention.
 
-        Strategy:
-          Each cross-link CL needs exactly 3 strand connections.
-          We grow strands CL → bead_1 → bead_2 → ... → CL' (another cross-link).
-          Each strand is a sequence of bivalent beads between two cross-links.
-
-          To guarantee no dangling ends:
-            * every strand MUST terminate at a cross-link at BOTH ends.
-            * bivalent beads are drawn from a pool of unused beads.
-            * cross-link valence budget: each starts with 3 free slots.
-
-          Execution:
-            1. Build a list of (CL, slot) "open half-edges" — each cross-link
-               contributes 3 open half-edges.
-            2. Shuffle and pair them up: each pair becomes one strand.
-               Self-pairs (CL connects to itself) are retried.
-            3. For each paired (CL_a, CL_b) grow a strand of length drawn
-               from Flory-Stockmayer using unused bivalent beads.
-            4. If bivalent-bead pool runs dry, shorten remaining strands to
-               length 0 (direct CL–CL bond, a "short cross-link").
-            5. Any bivalent beads left over are grafted onto existing strands
-               as interior insertions (maintains valence = 2).
+        Key idea: when bonding atom j to atom i, immediately unwrap j to
+        the nearest image of i. Store these unwrapped positions so that
+        all bonds satisfy |pos[i] - pos[j]| < R0 without PBC.
         """
-        cl_ids = self.crosslink_ids
-        N_cl = len(cl_ids)
-        bivalent_pool = [i for i in range(self.N_m) if i not in self._cl_set]
-        self.rng.shuffle(bivalent_pool)
-        biv_ptr = [0]   # pointer into pool (list-wrap for closure)
+        L   = self.L
+        N   = self.N_m
+        cl_set = self._cl_set
+        r_max = FENE_R0 * 1.3
 
-        def next_bivalent():
-            if biv_ptr[0] < len(bivalent_pool):
-                b = bivalent_pool[biv_ptr[0]]
-                biv_ptr[0] += 1
-                return b
-            return None
+        # Unwrapped positions — modified as bonds are formed
+        pos_uw = self.positions.copy()
 
-        # --- build half-edge list ---
-        half_edges = []
-        for cl in cl_ids:
-            half_edges.extend([cl, cl, cl])   # 3 slots per cross-link
-        self.rng.shuffle(half_edges)
+        nbrs = self._cell_list(r_max)
 
-        # Pair half-edges; avoid self-pairs if possible
-        pairs = []
-        used = [False] * len(half_edges)
-        i = 0
-        while i < len(half_edges):
-            if used[i]:
-                i += 1
-                continue
-            # Find nearest unused partner that is not the same cross-link
-            found = False
-            for j in range(i + 1, len(half_edges)):
-                if not used[j] and half_edges[j] != half_edges[i]:
-                    pairs.append((half_edges[i], half_edges[j]))
-                    used[i] = True
-                    used[j] = True
-                    found = True
-                    break
-            if not found:
-                # Only self-pairs left — accept to preserve valence
-                for j in range(i + 1, len(half_edges)):
-                    if not used[j]:
-                        pairs.append((half_edges[i], half_edges[j]))
-                        used[i] = True
-                        used[j] = True
-                        break
-            i += 1
-
-        # --- grow strands ---
+        valence_max = np.array([3 if i in cl_set else 2 for i in range(N)])
+        valence_cur = np.zeros(N, dtype=int)
+        bond_set = set()
         backbone_bonds = []
         crosslink_bonds = []
 
-        for (cl_a, cl_b) in pairs:
-            n = self._fs_length()   # desired strand length (# bivalent beads)
+        bonded = np.zeros(N, dtype=bool)   # True once atom is bonded to someone
 
-            # Collect up to n bivalent beads for this strand
-            strand_beads = []
-            for _ in range(n):
-                b = next_bivalent()
-                if b is None:
+        def try_bond(i, j):
+            if valence_cur[i] >= valence_max[i]: return False
+            if valence_cur[j] >= valence_max[j]: return False
+            if i in cl_set and j in cl_set:      return False
+            key = (min(i,j), max(i,j))
+            if key in bond_set:                  return False
+            # Unwrap j to nearest image of i — but only if j not yet placed
+            old_pos_j = pos_uw[j].copy()
+            if not bonded[j]:
+                dr = pos_uw[j] - pos_uw[i]
+                dr -= L * np.round(dr / L)
+                pos_uw[j] = pos_uw[i] + dr
+            r = np.linalg.norm(pos_uw[j] - pos_uw[i])
+            if r >= FENE_R0:
+                pos_uw[j] = old_pos_j   # rollback
+                return False
+            bond_set.add(key)
+            valence_cur[i] += 1
+            valence_cur[j] += 1
+            bonded[i] = True
+            bonded[j] = True
+            if i in cl_set or j in cl_set:
+                crosslink_bonds.append((i, j))
+            else:
+                backbone_bonds.append((i, j))
+            return True
+
+        def nearest_free_nbr(i, exclude=None):
+            candidates = []
+            for j in nbrs[i]:
+                if j == i: continue
+                if exclude is not None and j == exclude: continue
+                if valence_cur[j] >= valence_max[j]: continue
+                if i in cl_set and j in cl_set: continue
+                key = (min(i,j), max(i,j))
+                if key in bond_set: continue
+                # Use original wrapped positions for neighbour search
+                dr = self.positions[i] - self.positions[j]
+                dr -= L * np.round(dr / L)
+                candidates.append((np.linalg.norm(dr), j))
+            if not candidates:
+                return None
+            return min(candidates)[1]
+
+        cl_shuffled = list(self.crosslink_ids)
+        self.rng.shuffle(cl_shuffled)
+
+        for cl in cl_shuffled:
+            while valence_cur[cl] < valence_max[cl]:
+                n_target = max(1, int(self.rng.geometric(1.0 / self.mean_strand)))
+                prev = cl
+                cur = nearest_free_nbr(cl)
+                if cur is None or not try_bond(cl, cur):
                     break
-                strand_beads.append(b)
+                for _ in range(n_target - 1):
+                    if cur in cl_set:
+                        break
+                    nxt = nearest_free_nbr(cur, exclude=prev)
+                    if nxt is None or not try_bond(cur, nxt):
+                        break
+                    prev, cur = cur, nxt
+                if cur not in cl_set:
+                    for j in nbrs[cur]:
+                        if j in cl_set and valence_cur[j] < valence_max[j]:
+                            try_bond(cur, j)
+                            break
 
-            # Build bonds: cl_a — b0 — b1 — ... — b_{k-1} — cl_b
-            chain = [cl_a] + strand_beads + [cl_b]
-            for k in range(len(chain) - 1):
-                u, v = chain[k], chain[k + 1]
-                if u in self._cl_set or v in self._cl_set:
-                    crosslink_bonds.append((u, v))
-                else:
-                    backbone_bonds.append((u, v))
-
-        # --- handle leftover bivalent beads ---
-        # Insert each leftover bead into a random backbone bond
-        # (split bond u-v into u-b-v), keeping valence = 2 everywhere
-        leftover = bivalent_pool[biv_ptr[0]:]
-        if leftover and backbone_bonds:
-            for b in leftover:
-                # Pick a random backbone bond to split
-                idx = int(self.rng.integers(len(backbone_bonds)))
-                u, v = backbone_bonds[idx]
-                backbone_bonds.pop(idx)
-                backbone_bonds.append((u, b))
-                backbone_bonds.append((b, v))
+        for i in self.rng.permutation(N):
+            while valence_cur[i] < valence_max[i]:
+                j = nearest_free_nbr(i)
+                if j is None or not try_bond(i, j):
+                    break
 
         self.backbone_bonds = backbone_bonds
         self.crosslink_bonds = crosslink_bonds
+        self.positions = pos_uw   # save unwrapped positions
+        self._update_degree()
 
-        # Compute degrees
-        deg = np.zeros(self.N_m, dtype=int)
-        for u, v in self.all_bonds:
-            deg[u] += 1
-            deg[v] += 1
-        self._degree = deg
+    def _cell_list(self, r_cut):
+        """Return dict i -> [j, ...] of neighbours within r_cut (PBC)."""
+        pos = self.positions
+        L   = self.L
+        N   = self.N_m
 
-    # ------------------------------------------------------------------ #
-    #  Step 4 – verify                                                     #
-    # ------------------------------------------------------------------ #
+        n_cells = max(1, int(L / r_cut))
+        cs = L / n_cells
+        cell_idx = (pos / cs).astype(int) % n_cells
+        cells = defaultdict(list)
+        for i in range(N):
+            cells[tuple(cell_idx[i])].append(i)
 
-    def _verify(self):
-        deg = self._degree
-        bad = np.where(deg <= 1)[0]
-        if len(bad) > 0:
-            # Prune residual degree-1 nodes (should be very few, < 0.5%)
-            bad_set = set(bad.tolist())
-            self.backbone_bonds = [
-                (u, v) for u, v in self.backbone_bonds
-                if u not in bad_set and v not in bad_set
-            ]
-            self.crosslink_bonds = [
-                (u, v) for u, v in self.crosslink_bonds
-                if u not in bad_set and v not in bad_set
-            ]
-            # Remove from crosslink_ids if a cross-link ended up isolated
-            self.crosslink_ids = [
-                cl for cl in self.crosslink_ids if cl not in bad_set
-            ]
-            self._cl_set -= bad_set
+        r_cut2 = r_cut ** 2
+        nbrs = defaultdict(list)
+        for i in range(N):
+            cx, cy, cz = cell_idx[i]
+            for dx in (-1,0,1):
+                for dy in (-1,0,1):
+                    for dz in (-1,0,1):
+                        for j in cells[((cx+dx)%n_cells,
+                                        (cy+dy)%n_cells,
+                                        (cz+dz)%n_cells)]:
+                            if j == i: continue
+                            dr = pos[i] - pos[j]
+                            dr -= L * np.round(dr / L)
+                            if np.dot(dr, dr) < r_cut2:
+                                nbrs[i].append(j)
+        return nbrs
 
-            # Recompute degrees
-            deg2 = np.zeros(self.N_m, dtype=int)
-            for u, v in self.all_bonds:
-                deg2[u] += 1
-                deg2[v] += 1
-            self._degree = deg2
+    def _unwrap_positions(self):
+        """
+        Unwrap positions so every bonded pair (i,j) satisfies
+        |pos[i] - pos[j]| < R0 WITHOUT minimum image convention.
 
-            n_pruned = len(bad)
+        Uses iterative BFS: after each pass check if any bonds
+        still cross the boundary and repeat until all are fixed.
+        """
+        from collections import defaultdict, deque
+
+        pos = self.positions.copy().astype(float)
+        L   = self.L
+
+        adj = defaultdict(list)
+        for i, j in self.all_bonds:
+            adj[i].append(j)
+            adj[j].append(i)
+
+        # Iterative BFS — repeat until no bond crosses boundary
+        for iteration in range(20):
+            visited = np.zeros(self.N_m, dtype=bool)
+            changed = False
+
+            for start in range(self.N_m):
+                if visited[start]:
+                    continue
+                visited[start] = True
+                queue = deque([start])
+                while queue:
+                    i = queue.popleft()
+                    for j in adj[i]:
+                        if visited[j]:
+                            continue
+                        visited[j] = True
+                        dr = pos[j] - pos[i]
+                        shift = np.round(dr / L)
+                        if np.any(shift != 0):
+                            pos[j] -= shift * L
+                            changed = True
+                        queue.append(j)
+
+            if not changed:
+                break
+
+        self.positions = pos
+
+        # Verify
+        bad = [(i, j, float(np.linalg.norm(pos[i]-pos[j])))
+               for i, j in self.all_bonds
+               if np.linalg.norm(pos[i]-pos[j]) >= 1.5]
+        if bad:
             import warnings
             warnings.warn(
-                f"Pruned {n_pruned} dangling/isolated beads "
-                f"({100*n_pruned/self.N_m:.2f}% of N_m). "
-                "Consider increasing N_m or adjusting c/mean_strand.",
+                f"{len(bad)} bonds >= R0=1.5 after unwrap "
+                f"(max={max(r for _,_,r in bad):.4f}).",
                 stacklevel=2
             )
 
-        # Check for duplicate bonds
-        bond_set = set()
-        dupes = 0
-        clean_bb, clean_cl = [], []
-        for u, v in self.backbone_bonds:
-            key = (min(u, v), max(u, v))
-            if key not in bond_set:
-                bond_set.add(key)
-                clean_bb.append((u, v))
-            else:
-                dupes += 1
-        for u, v in self.crosslink_bonds:
-            key = (min(u, v), max(u, v))
-            if key not in bond_set:
-                bond_set.add(key)
-                clean_cl.append((u, v))
-            else:
-                dupes += 1
-        if dupes:
-            self.backbone_bonds = clean_bb
-            self.crosslink_bonds = clean_cl
+    
 
-        # Final degree recompute
-        deg3 = np.zeros(self.N_m, dtype=int)
+    def _prune_dangling(self):
+        # Iteratively remove degree-1 (dangling) nodes
+        changed = True
+        while changed:
+            changed = False
+            self._update_degree()
+            dangling = set(np.where(self._degree == 1)[0].tolist())
+            if dangling:
+                self.backbone_bonds = [
+                    (u,v) for u,v in self.backbone_bonds
+                    if u not in dangling and v not in dangling
+                ]
+                self.crosslink_bonds = [
+                    (u,v) for u,v in self.crosslink_bonds
+                    if u not in dangling and v not in dangling
+                ]
+                self.crosslink_ids = [
+                    cl for cl in self.crosslink_ids if cl not in dangling
+                ]
+                self._cl_set -= dangling
+                changed = True
+
+        # Remove isolated (degree-0) beads: re-index everything
+        self._update_degree()
+        isolated = set(np.where(self._degree == 0)[0].tolist())
+        if isolated:
+            old2new = {}
+            new_idx = 0
+            for i in range(self.N_m):
+                if i not in isolated:
+                    old2new[i] = new_idx
+                    new_idx += 1
+
+            self.positions = self.positions[
+                [i for i in range(self.N_m) if i not in isolated]
+            ]
+            self.backbone_bonds = [
+                (old2new[u], old2new[v]) for u,v in self.backbone_bonds
+            ]
+            self.crosslink_bonds = [
+                (old2new[u], old2new[v]) for u,v in self.crosslink_bonds
+            ]
+            self.crosslink_ids = [
+                old2new[cl] for cl in self.crosslink_ids
+                if cl not in isolated
+            ]
+            self._cl_set = set(self.crosslink_ids)
+            self.N_m = new_idx
+
+        self._update_degree()
+
+    # ------------------------------------------------------------------ #
+    #  Step 5: verify                                                      #
+    # ------------------------------------------------------------------ #
+
+    def _verify(self):
+        self._update_degree()
+        bl = self._bond_lengths()
+        if bl is not None and len(bl) > 0:
+            n_bad = int((bl >= FENE_R0).sum())
+            if n_bad > 0:
+                import warnings
+                warnings.warn(
+                    f"{n_bad} bonds >= R0={FENE_R0} "
+                    f"(max={bl.max():.3f}). "
+                    "Script will compress these before dynamics.",
+                    stacklevel=2
+                )
+        deg = self._degree
+        n_isolated = int((deg == 0).sum())
+        if n_isolated > 0:
+            pct = 100 * n_isolated / self.N_m
+            import warnings
+            warnings.warn(
+                f"{n_isolated} isolated beads ({pct:.1f}%). "
+                "Consider increasing N_m.",
+                stacklevel=2
+            )
+
+    # ------------------------------------------------------------------ #
+    #  Helpers                                                             #
+    # ------------------------------------------------------------------ #
+
+    def _update_degree(self):
+        deg = np.zeros(self.N_m, dtype=int)
         for u, v in self.all_bonds:
-            deg3[u] += 1
-            deg3[v] += 1
-        self._degree = deg3
+            deg[u] += 1; deg[v] += 1
+        self._degree = deg
+
+    def _bond_lengths(self):
+        if not self.all_bonds or self.positions is None:
+            return None
+        pos = self.positions; L = self.L
+        lengths = []
+        for u, v in self.all_bonds:
+            dr = pos[u] - pos[v]
+            dr -= L * np.round(dr / L)
+            lengths.append(np.linalg.norm(dr))
+        return np.array(lengths)
