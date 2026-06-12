@@ -124,7 +124,7 @@ def add_fene(system, bonds, k=FENE_K, r0=FENE_R0):
     energy_expr = f"k_bond * (-0.5 * {r0*r0:.6f} * log(1 - (r/{r0:.6f})^2))"
     fene = CustomBondForce(energy_expr)
     fene.addPerBondParameter("k_bond")
-
+    fene.setUsesPeriodicBoundaryConditions(True)  # PBC
     for (i, j) in bonds:
         fene.addBond(i, j, [k])
 
