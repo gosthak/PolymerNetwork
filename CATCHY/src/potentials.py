@@ -71,35 +71,37 @@ def add_wca(system, particle_types, sigma_m=SIGMA_M, epsilon_m=EPSILON_M):
     return wca
 
 
-def add_wca_monomers_only(system, n_monomers, sigma_m=SIGMA_M, epsilon_m=EPSILON_M):
+def add_wca_monomers_only(system, n_monomers, sigma_m=SIGMA_M,
+                          epsilon_m=EPSILON_M, n_total=None):
     """
     WCA between monomer pairs only (indices 0..n_monomers-1).
     Enzyme pairs are excluded and handled by add_expanded_lj.
 
-    All monomers have identical sigma_m and epsilon_m, so we inline the
-    constants directly into the energy expression — no per-particle
-    parameters needed, and no undefined-variable errors in OpenMM.
-
-    U_WCA(r) = 4*eps*[(s/r)^12 - (s/r)^6] + eps   for r < 2^(1/6)*s
-             = 0                                     otherwise
-    with s = sigma_m (homonuclear pairs).
+    n_total : total number of particles in the system (monomers + enzymes).
+              OpenMM requires addParticle() called exactly n_total times.
+              If None, assumes n_total == n_monomers (network-only system).
     """
-    rc  = WCA_RC                          # = 2^(1/6) * sigma_m
+    if n_total is None:
+        n_total = n_monomers
+
+    rc  = WCA_RC
     eps = epsilon_m
 
     energy_expr = (
         f"step({rc:.10f} - r) * "
-        f"(4*{eps}*(({sigma_m}/r)^12 - ({sigma_m}/r)^6) + {eps})"
+        f"(4*{eps}*(pow({sigma_m}/r,12) - pow({sigma_m}/r,6)) + {eps})"
     )
 
     wca = CustomNonbondedForce(energy_expr)
     wca.setNonbondedMethod(CustomNonbondedForce.CutoffPeriodic)
     wca.setCutoffDistance(rc * 1.05)
 
-    monomer_set = set(range(n_monomers))
-    for i in range(n_monomers):
+    # Must add exactly n_total particles (one per system particle)
+    for i in range(n_total):
         wca.addParticle([])
 
+    # Only compute interactions between monomer pairs
+    monomer_set = set(range(n_monomers))
     wca.addInteractionGroup(monomer_set, monomer_set)
     system.addForce(wca)
     return wca
@@ -121,10 +123,12 @@ def add_fene(system, bonds, k=FENE_K, r0=FENE_R0):
     # Energy: U = k_bond * (-0.5 * R0^2 * log(1 - (r/R0)^2))
     # k_bond is per-bond (set to 0 for cleaved bonds by CleavageManager)
     # R0 is fixed — inlined as a number to avoid parser issues
-    energy_expr = f"k_bond * (-0.5 * {r0*r0:.6f} * log(1 - (r/{r0:.6f})^2))"
+    r0sq = r0 * r0
+    # Note: using pow() instead of ^ for CustomBondForce compatibility
+    energy_expr = f"k_bond * (-0.5 * {r0sq:.6f} * log(1 - pow(r/{r0:.6f}, 2)))"
     fene = CustomBondForce(energy_expr)
     fene.addPerBondParameter("k_bond")
-    fene.setUsesPeriodicBoundaryConditions(True)  # PBC
+
     for (i, j) in bonds:
         fene.addBond(i, j, [k])
 
@@ -163,10 +167,13 @@ def add_expanded_lj(system, enzyme_indices, monomer_indices, sigma_E,
 
     eps_shift = 4.0 * eps * ((sigma_ij / rc_lj) ** 12 - (sigma_ij / rc_lj) ** 6)
 
+    sij = sigma_ij
+    dlt = delta
+    rcd = rc_lj + delta
+
     energy_expr = (
-        f"step(rc_plus_delta - r)*("
-        f"4*{eps}*((sij/(r-delta))^12 - (sij/(r-delta))^6) - {eps_shift:.8f});"
-        f"sij={sigma_ij:.6f}; delta={delta:.6f}; rc_plus_delta={rc_lj + delta:.6f};"
+        f"step({rcd:.6f} - r) * "
+        f"(4*{eps}*(pow({sij:.6f}/(r-{dlt:.6f}),12) - pow({sij:.6f}/(r-{dlt:.6f}),6)) - {eps_shift:.8f})"
     )
 
     force = CustomNonbondedForce(energy_expr)
@@ -192,8 +199,8 @@ def add_enzyme_enzyme_wca(system, enzyme_indices, sigma_E, epsilon_m=EPSILON_M):
     rc = (2.0 ** (1.0 / 6.0)) * sigma_E + 0.02
 
     energy_expr = (
-        f"step({rc:.6f} - r)*"
-        f"(4*{epsilon_m}*(({sigma_E:.6f}/r)^12 - ({sigma_E:.6f}/r)^6) + {epsilon_m});"
+        f"step({rc:.6f} - r) * "
+        f"(4*{epsilon_m}*(pow({sigma_E:.6f}/r,12) - pow({sigma_E:.6f}/r,6)) + {epsilon_m})"
     )
     force = CustomNonbondedForce(energy_expr)
     force.setNonbondedMethod(CustomNonbondedForce.CutoffPeriodic)
