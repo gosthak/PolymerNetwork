@@ -89,7 +89,7 @@ def add_wca_monomers_only(system, n_monomers, sigma_m=SIGMA_M,
 
     energy_expr = (
         f"step({rc:.10f} - r) * "
-        f"(4*{eps}*(pow({sigma_m}/r,12) - pow({sigma_m}/r,6)) + {eps})"
+        f"(4*{eps}*((({sigma_m}/r)^12) - (({sigma_m}/r)^6)) + {eps})"
     )
 
     wca = CustomNonbondedForce(energy_expr)
@@ -124,8 +124,7 @@ def add_fene(system, bonds, k=FENE_K, r0=FENE_R0):
     # k_bond is per-bond (set to 0 for cleaved bonds by CleavageManager)
     # R0 is fixed — inlined as a number to avoid parser issues
     r0sq = r0 * r0
-    # Note: using pow() instead of ^ for CustomBondForce compatibility
-    energy_expr = f"k_bond * (-0.5 * {r0sq:.6f} * log(1 - pow(r/{r0:.6f}, 2)))"
+    energy_expr = f"k_bond * (-0.5 * {r0sq:.6f} * log(1 - (r/{r0:.6f})^2))"
     fene = CustomBondForce(energy_expr)
     fene.addPerBondParameter("k_bond")
 
@@ -173,7 +172,7 @@ def add_expanded_lj(system, enzyme_indices, monomer_indices, sigma_E,
 
     energy_expr = (
         f"step({rcd:.6f} - r) * "
-        f"(4*{eps}*(pow({sij:.6f}/(r-{dlt:.6f}),12) - pow({sij:.6f}/(r-{dlt:.6f}),6)) - {eps_shift:.8f})"
+        f"(4*{eps}*(({sij:.6f}/(r-{dlt:.6f}))^12 - ({sij:.6f}/(r-{dlt:.6f}))^6) - {eps_shift:.8f})"
     )
 
     force = CustomNonbondedForce(energy_expr)
@@ -200,7 +199,7 @@ def add_enzyme_enzyme_wca(system, enzyme_indices, sigma_E, epsilon_m=EPSILON_M):
 
     energy_expr = (
         f"step({rc:.6f} - r) * "
-        f"(4*{epsilon_m}*(pow({sigma_E:.6f}/r,12) - pow({sigma_E:.6f}/r,6)) + {epsilon_m})"
+        f"(4*{epsilon_m}*(({sigma_E:.6f}/r)^12 - ({sigma_E:.6f}/r)^6) + {epsilon_m})"
     )
     force = CustomNonbondedForce(energy_expr)
     force.setNonbondedMethod(CustomNonbondedForce.CutoffPeriodic)
