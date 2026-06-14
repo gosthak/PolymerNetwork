@@ -69,8 +69,8 @@ class EnzymeSystem:
 
         self.system = None
         self.simulation = None
-        self.fene_force = None        # reference kept for CleavageManager
-        self.crosslink_bond_indices = None   # positions in fene_force bond list
+        self.fene_force = None
+        self.crosslink_bond_indices = None   # cross-link bonds — these get cleaved
 
     # ------------------------------------------------------------------
     # Public
@@ -163,9 +163,9 @@ class EnzymeSystem:
         # 2. FENE bonds (backbone + cross-links)
         all_bonds = self.network.all_bonds
         self.fene_force = add_fene(self.system, all_bonds)
-        # Record cross-link bond start index for CleavageManager
+        # Cross-link bonds come after backbone in all_bonds = backbone + crosslink
         self.crosslink_bond_indices = list(
-            range(len(self.network.backbone_bonds), len(all_bonds))
+            range(len(self.network.backbone_bonds), len(self.network.all_bonds))
         )
 
         # 3. Expanded LJ — enzyme-monomer interaction (Paper 1 eq. 4)
@@ -299,7 +299,8 @@ class EnzymeSystem:
 # ---------------------------------------------------------------------------
 
 def _dummy_topology(N_total, N_m=None, N_E=None):
-    import openmm.app as app   
+    import openmm.app as app
+    import openmm.app as app
     """
     Minimal Topology with monomers in chain 'A' (residue MON)
     and enzymes in chain 'B' (residue ENZ).
