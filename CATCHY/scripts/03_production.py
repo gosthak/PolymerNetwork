@@ -289,11 +289,18 @@ def main():
             pdb_path = os.path.join(out_dir, f"topology_{base_label}.pdb")
             if not os.path.exists(pdb_path):
                 state = enz_sys.simulation.context.getState(getPositions=True)
-                mm.app.PDBFile.writeFile(
-                    enz_sys.simulation.topology,
-                    state.getPositions(),
-                    open(pdb_path, "w")
-                )
+                with open(pdb_path, "w") as pdb_f:
+                    # CRYST1 record with box dimensions (in Angstroms, 1 nm = 10 Å)
+                    L_ang = enz_sys.L * 10.0
+                    pdb_f.write(
+                        f"CRYST1{L_ang:9.3f}{L_ang:9.3f}{L_ang:9.3f}"
+                        f"  90.00  90.00  90.00 P 1           1\n"
+                    )
+                    mm.app.PDBFile.writeFile(
+                        enz_sys.simulation.topology,
+                        state.getPositions(),
+                        pdb_f
+                    )
                 print(f"  Topology saved → {pdb_path}")
 
             # Set up cleavage manager
