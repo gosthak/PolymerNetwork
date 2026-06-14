@@ -171,14 +171,12 @@ class EnzymeSystem:
         # 3. Expanded LJ — enzyme-monomer interaction (Paper 1 eq. 4)
         self.elj_force = add_expanded_lj(
             self.system, enzyme_idx, monomer_idx,
-            self.sigma_E, attractive=self.attractive,
-            box_length=self.L
+            self.sigma_E, attractive=self.attractive
         )
 
         # 4. WCA — enzyme-enzyme
         if self.N_E > 1:
-            add_enzyme_enzyme_wca(self.system, enzyme_idx, self.sigma_E,
-                                  box_length=self.L)
+            add_enzyme_enzyme_wca(self.system, enzyme_idx, self.sigma_E)
 
     def _build_simulation(self):
         """Build Langevin integrator and Simulation."""
