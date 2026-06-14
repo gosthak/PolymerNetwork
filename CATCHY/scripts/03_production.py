@@ -6,7 +6,7 @@ For each sigma_E × {active, passive}:
   1. Load enzyme_system checkpoint
   2. Run production in blocks of save_interval steps
   3. At each block end:
-       - Write trajectory frame (positions + bond_status) to HDF5
+       - Write DCD trajectory frame
        - Attempt cleavage (active runs only)
        - Compute running MSD of enzymes
   4. Save msd_{label}.npz + survival_{label}.npz
@@ -22,7 +22,7 @@ import numpy as np
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from src.utils import load_config, confinement_parameter, HDF5Writer, _unwrap
+from src.utils import load_config, confinement_parameter, _unwrap
 from src.network_builder import NetworkBuilder
 from src.enzyme_system import EnzymeSystem
 from src.cleavage import CleavageManager
@@ -57,19 +57,7 @@ def run_production(enz_sys, cleavage_mgr, n_production, save_interval,
     label : str
     """
     N_total = enz_sys.N_m + enz_sys.N_E
-    N_cl = len(cleavage_mgr.cl_indices) if cleavage_mgr else 0
     L = enz_sys.L
-
-    # HDF5 writer
-    traj_path = os.path.join(out_dir, f"traj_{label}.h5")
-    k_cat_val = cleavage_mgr.k_cat if cleavage_mgr else 0.0
-    writer = HDF5Writer(
-        traj_path, N_total, enz_sys.N_m, enz_sys.N_E, N_cl,
-        sigma_E=enz_sys.sigma_E,
-        rho=enz_sys.network.rho,
-        k_cat=k_cat_val,
-        L=L
-    )
 
     # Set box vectors in topology so DCDReporter writes them every frame
     L_nm = enz_sys.L
@@ -97,7 +85,13 @@ def run_production(enz_sys, cleavage_mgr, n_production, save_interval,
         )
     )
 
-    n_blocks = n_production // save_interval
+    # Cleavage event log
+    if cleavage_mgr:
+        cleavage_log_path = os.path.join(out_dir, f"cleavage_{label}.log")
+        cleavage_log_f = open(cleavage_log_path, "w")
+        cleavage_log_f.write("step\tbond_idx\tatom_i\tatom_j\tS(t)\n")
+    else:
+        cleavage_log_f = None
     enzyme_positions_log = []   # for MSD computation
     survival_log = []
     step_log = []
@@ -117,12 +111,7 @@ def run_production(enz_sys, cleavage_mgr, n_production, save_interval,
         pos = np.array(state.getPositions(asNumpy=True))   # (N_total, 3)
 
         # Bond status
-        if cleavage_mgr:
-            bond_status = cleavage_mgr.get_bond_status()
-        else:
-            bond_status = np.ones(N_cl, dtype=np.int8)
 
-        writer.write_frame(pos, bond_status, current_step, current_time)
 
         # Store enzyme positions for MSD
         enzyme_positions_log.append(pos[enz_sys.N_m:enz_sys.N_m + enz_sys.N_E].copy())
@@ -132,6 +121,11 @@ def run_production(enz_sys, cleavage_mgr, n_production, save_interval,
             n_new = cleavage_mgr.attempt_cleavage(
                 enz_sys.simulation.context, current_step
             )
+            if n_new > 0 and cleavage_log_f:
+                S = cleavage_mgr.survival_fraction
+                for (step_ev, fi, i, j) in cleavage_mgr.cleavage_log[-n_new:]:
+                    cleavage_log_f.write(f"{step_ev}\t{fi}\t{i}\t{j}\t{S:.4f}\n")
+                cleavage_log_f.flush()
             survival_log.append(cleavage_mgr.survival_fraction)
         else:
             survival_log.append(1.0)
@@ -148,7 +142,8 @@ def run_production(enz_sys, cleavage_mgr, n_production, save_interval,
                   f"t={current_time:.0f}  S={S:.3f}  "
                   f"elapsed={elapsed:.0f}s  ETA={eta:.0f}s")
 
-    writer.close()
+    if cleavage_log_f:
+        cleavage_log_f.close()
 
     # ------------------------------------------------------------------
     # Compute enzyme MSD
@@ -340,6 +335,7 @@ def main():
                     N_m=N_m, L=L,
                     k_cat=k_cat, r_cleave=r_cleave,
                     sigma_E=sigma_E, dt=dt,
+                    check_interval=save_interval,
                 )
             else:
                 cleave_mgr = None
