@@ -299,6 +299,7 @@ class EnzymeSystem:
 # ---------------------------------------------------------------------------
 
 def _dummy_topology(N_total, N_m=None, N_E=None):
+    import openmm.app as app   
     """
     Minimal Topology with monomers in chain 'A' (residue MON)
     and enzymes in chain 'B' (residue ENZ).
