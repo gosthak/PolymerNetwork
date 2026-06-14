@@ -83,6 +83,7 @@ class CleavageManager:
 
         rng = np.random.default_rng()
         bonds_to_cleave = []
+        n_contacts = 0
 
         for fi in list(self.active_bonds):
             i, j = self._bond_atoms[fi]
@@ -95,11 +96,21 @@ class CleavageManager:
             for ep in enzyme_pos:
                 d = ep - midpoint
                 d -= self.L * np.round(d / self.L)
-                if np.linalg.norm(d) < self.r_cleave_abs:
+                dist = np.linalg.norm(d)
+                if dist < self.r_cleave_abs:
+                    n_contacts += 1
                     if rng.random() < self.p_cleave:
                         bonds_to_cleave.append(fi)
                         self.cleavage_log.append((step, fi, i, j))
-                    break   # one enzyme enough per bond per check
+                    break
+
+        if step % 5000 == 0:
+            print(f"  [cleavage debug] step={step} "
+                  f"active_bonds={len(self.active_bonds)} "
+                  f"n_enzymes={len(enzyme_pos)} "
+                  f"r_cleave={self.r_cleave_abs:.2f} "
+                  f"contacts={n_contacts} "
+                  f"p_cleave={self.p_cleave:.4f}")   # one enzyme enough per bond per check
 
         if bonds_to_cleave:
             for fi in bonds_to_cleave:
