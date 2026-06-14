@@ -227,14 +227,24 @@ def main():
     elif args.mode == "passive":
         modes = {"passive": False}
 
-    # Rebuild network topology
+    # Load network topology from file — same as step 2
     net_data = np.load(os.path.join(out_dir, "network_data.npz"), allow_pickle=True)
-    L = float(net_data["L"])
-    builder = NetworkBuilder(N_m=N_m, rho=rho, c=c,
-                             mean_strand=mean_strand, seed=seed)
-    builder.build()
-    builder.positions = net_data["positions"][:N_m].copy()
-    builder.L = L
+    L        = float(net_data["L"])
+    N_m_actual = int(net_data["N_m"])
+
+    builder = NetworkBuilder.__new__(NetworkBuilder)
+    builder.N_m           = N_m_actual
+    builder.L             = L
+    builder.rho           = rho
+    builder.c             = c
+    builder.mean_strand   = mean_strand
+    builder.positions     = net_data["positions"]
+    builder.backbone_bonds  = [tuple(b) for b in net_data["backbone_bonds"]]
+    builder.crosslink_bonds = [tuple(b) for b in net_data["crosslink_bonds"]]
+    builder.crosslink_ids   = list(net_data["crosslink_ids"])
+    builder._cl_set       = set(builder.crosslink_ids)
+    builder._degree       = None
+    builder._update_degree = lambda: None
 
     summary_rows = []
 
