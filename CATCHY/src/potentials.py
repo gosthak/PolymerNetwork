@@ -49,7 +49,12 @@ def add_fene(system, bonds, k=FENE_K, r0=FENE_R0):
     k_bond is per-bond so CleavageManager can zero cleaved bonds.
     """
     r0sq = r0 * r0
-    energy_expr = f"k_bond * (-0.5 * {r0sq:.6f} * log(1 - (r/{r0:.6f})^2))"
+    # select() avoids computing log when k_bond=0 (cleaved bond, r may exceed R0)
+    energy_expr = (
+        f"select(k_bond, "
+        f"k_bond * (-0.5 * {r0sq:.6f} * log(1 - (r/{r0:.6f})^2)), "
+        f"0)"
+    )
     fene = CustomBondForce(energy_expr)
     fene.addPerBondParameter("k_bond")
     for (i, j) in bonds:
