@@ -3,6 +3,7 @@
 
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/)
 [![OpenMM 8](https://img.shields.io/badge/OpenMM-8.x-green.svg)](https://openmm.org/)
+[![ANR funded](https://img.shields.io/badge/funded-ANR-red.svg)](https://anr.fr/)
 
 ---
 
@@ -82,6 +83,29 @@ bash run_all.sh --config ../configs/default.yaml --platform CUDA
 
 # 3. CPU-only fallback
 bash run_all.sh --config ../configs/default.yaml --platform CPU
+```
+
+### Running specific confinement regimes
+
+Each config targets a different range of C = σ_E / λ via `sigma_list`:
+
+```bash
+# Weak confinement (C ≲ 1) — fastest, enzymes diffuse freely
+bash run_all.sh --config ../configs/weak_confinement.yaml
+
+# Strong confinement (1 ≲ C ≲ 3) — hopping regime
+bash run_all.sh --config ../configs/strong_confinement.yaml
+
+# Extreme confinement (C ≳ 3) — enzymes nearly trapped, cleavage essential
+bash run_all.sh --config ../configs/extreme_confinement.yaml
+```
+
+Or step by step:
+
+```bash
+python 01_build_network.py --config ../configs/strong_confinement.yaml
+python 02_embed_enzymes.py --config ../configs/strong_confinement.yaml
+python 03_production.py    --config ../configs/strong_confinement.yaml
 ```
 
 ---
@@ -175,3 +199,11 @@ output/
     ├── fig_F_survival.pdf
     └── fig_G_enhancement.pdf
 ```
+
+---
+
+## Contacts
+
+Virginie Hugouvieux — virginie.hugouvieux@inrae.fr  
+Xavier Frank — xavier.frank@inrae.fr  
+IATE lab, Université de Montpellier / INRAE
