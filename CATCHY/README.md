@@ -8,7 +8,6 @@
 
 ## Scientific context
 
-This project is the numerical core of the **CATCHY** ANR project (IATE lab, Montpellier).  
 It directly extends **Sorichetti, Hugouvieux & Kob, *Macromolecules* 2021** (Paper 1), which
 studied passive nanoparticle (NP) diffusion in a permanently cross-linked polymer network.
 
