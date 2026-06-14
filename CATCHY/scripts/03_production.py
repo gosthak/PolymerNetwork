@@ -289,16 +289,22 @@ def main():
             pdb_path = os.path.join(out_dir, f"topology_{base_label}.pdb")
             if not os.path.exists(pdb_path):
                 state = enz_sys.simulation.context.getState(getPositions=True)
+                import openmm.unit as unit
+                pos_nm = state.getPositions(asNumpy=True).value_in_unit(unit.nanometer)
+                # Wrap all positions into box [0, L)
+                L_nm = enz_sys.L
+                pos_wrapped = pos_nm % L_nm
+                # Convert to OpenMM Quantity in nm for PDBFile
+                pos_quantity = pos_wrapped * unit.nanometer
                 with open(pdb_path, "w") as pdb_f:
-                    # CRYST1 record with box dimensions (in Angstroms, 1 nm = 10 Å)
-                    L_ang = enz_sys.L * 10.0
+                    L_ang = L_nm * 10.0  # nm → Å
                     pdb_f.write(
                         f"CRYST1{L_ang:9.3f}{L_ang:9.3f}{L_ang:9.3f}"
                         f"  90.00  90.00  90.00 P 1           1\n"
                     )
                     mm.app.PDBFile.writeFile(
                         enz_sys.simulation.topology,
-                        state.getPositions(),
+                        pos_quantity,
                         pdb_f
                     )
                 print(f"  Topology saved → {pdb_path}")
