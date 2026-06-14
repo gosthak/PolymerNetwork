@@ -333,7 +333,7 @@ def main():
                 cleave_mgr = CleavageManager(
                     fene_force=enz_sys.fene_force,
                     crosslink_bond_indices=enz_sys.crosslink_bond_indices,
-                    N_m=N_m, L=L,
+                    N_m=enz_sys.N_m, L=L,
                     k_cat=k_cat, r_cleave=r_cleave,
                     sigma_E=sigma_E, dt=dt,
                     check_interval=save_interval,
