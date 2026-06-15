@@ -171,7 +171,10 @@ class NetworkBuilder:
                 dr = pos_uw[j] - pos_uw[i]
                 dr -= L * np.round(dr / L)
                 pos_uw[j] = pos_uw[i] + dr
-            r = np.linalg.norm(pos_uw[j] - pos_uw[i])
+            # Always use minimum image distance for the check
+            dr = pos_uw[j] - pos_uw[i]
+            dr -= L * np.round(dr / L)
+            r = np.linalg.norm(dr)
             if r >= FENE_R0:
                 pos_uw[j] = old_pos_j   # rollback
                 return False
