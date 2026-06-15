@@ -187,24 +187,13 @@ def main():
     # 2. Build OpenMM system
     # ------------------------------------------------------------------
     print("\n[2/5] Building OpenMM system ...")
-
-    # Pre-relaxation with HarmonicBondForce — uses minimum image, no singularity
-    print("      Pre-relaxation with harmonic bonds ...")
-    sim_h, system_h, _ = make_simulation(
-        N, L, builder.all_bonds, gamma_m, 0.1, 0.001, platform, use_fene=False
-    )
-    sim_h.context.setPositions([mm.Vec3(*p) for p in pos])
-    sim_h.minimizeEnergy(maxIterations=5000)
-    sim_h.context.setVelocitiesToTemperature(0.1)
-    sim_h.step(10000)
-    state_h = sim_h.context.getState(getPositions=True, getVelocities=True)
-    print("      Harmonic pre-relaxation done")
-
-    # Now build FENE system and load pre-relaxed positions
+    print("\n[2/5] Building OpenMM system ...")
+    # FENE uses PBC (setUsesPeriodicBoundaryConditions=True)
+    # so minimum image is applied automatically.
     sim, system, fene = make_simulation(
-        N, L, builder.all_bonds, gamma_m, T, dt, platform, use_fene=True
+        N, L, builder.all_bonds, gamma_m, T, dt, platform
     )
-    sim.context.setState(state_h)
+    sim.context.setPositions([mm.Vec3(*p) for p in pos])
     ok, _ = check_energy(sim, "before minimization", builder)
     print("      System built")
 
