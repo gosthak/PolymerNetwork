@@ -157,11 +157,16 @@ def main():
                              mean_strand=mean_strand, seed=seed)
     builder.build()
     builder.summary()
+    N   = builder.N_m   # actual N after pruning
+    L   = builder.L
+    rho_eff = N / L**3
+    print(f"  rho_eff (after pruning) = {rho_eff:.4f}  "
+          f"(target: {rho}, N_pruned: {N_m - N} beads removed)")
     print(f"      Done in {time.time()-t0:.1f} s")
 
     N   = builder.N_m   # may be less than N_m after pruning
     L   = builder.L
-    pos = builder.positions   # unwrapped by NetworkBuilder
+    pos = builder.positions.copy()   # unwrapped by NetworkBuilder
 
     # Verify no bonds exceed R0 without PBC
     bl = builder._bond_lengths()
@@ -182,10 +187,24 @@ def main():
     # 2. Build OpenMM system
     # ------------------------------------------------------------------
     print("\n[2/5] Building OpenMM system ...")
-    sim, system, fene = make_simulation(
-        N, L, builder.all_bonds, gamma_m, T, dt, platform
+
+    # Pre-relaxation with HarmonicBondForce — uses minimum image, no singularity
+    print("      Pre-relaxation with harmonic bonds ...")
+    sim_h, system_h, _ = make_simulation(
+        N, L, builder.all_bonds, gamma_m, 0.1, 0.001, platform, use_fene=False
     )
-    sim.context.setPositions([mm.Vec3(*p) for p in pos])
+    sim_h.context.setPositions([mm.Vec3(*p) for p in pos])
+    sim_h.minimizeEnergy(maxIterations=5000)
+    sim_h.context.setVelocitiesToTemperature(0.1)
+    sim_h.step(10000)
+    state_h = sim_h.context.getState(getPositions=True, getVelocities=True)
+    print("      Harmonic pre-relaxation done")
+
+    # Now build FENE system and load pre-relaxed positions
+    sim, system, fene = make_simulation(
+        N, L, builder.all_bonds, gamma_m, T, dt, platform, use_fene=True
+    )
+    sim.context.setState(state_h)
     ok, _ = check_energy(sim, "before minimization", builder)
     print("      System built")
 
