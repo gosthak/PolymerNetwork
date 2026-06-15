@@ -56,7 +56,8 @@ def add_fene(system, bonds, k=FENE_K, r0=FENE_R0):
         f"0)"
     )
     fene = CustomBondForce(energy_expr)
-    # No PBC for FENE — positions must be unwrapped so bonded pairs
+    fene.setUsesPeriodicBoundaryConditions(True)   # minimum image for bonded pairs
+    # Or no PBC for FENE — positions must be unwrapped so bonded pairs?
     # are close in Cartesian space (minimizer works without PBC)
     fene.addPerBondParameter("k_bond")
     for (i, j) in bonds:
