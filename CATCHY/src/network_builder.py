@@ -155,20 +155,32 @@ class NetworkBuilder:
         backbone_bonds = []
         crosslink_bonds = []
 
+        pos_uw = self.positions.copy()
+        bonded = np.zeros(N, dtype=bool)
+
         def try_bond(i, j):
             if valence_cur[i] >= valence_max[i]: return False
             if valence_cur[j] >= valence_max[j]: return False
             if i in cl_set and j in cl_set:      return False
             key = (min(i,j), max(i,j))
             if key in bond_set:                  return False
-            # PBC distance — FENE uses minimum image automatically
-            dr = self.positions[i] - self.positions[j]
+            # Unwrap j to nearest image of i — only if not yet placed
+            old_pos_j = pos_uw[j].copy()
+            dr = pos_uw[j] - pos_uw[i]
+            dr -= L * np.round(dr / L)
+            if not bonded[j]:
+                pos_uw[j] = pos_uw[i] + dr
+            # Check minimum image distance
+            dr = pos_uw[j] - pos_uw[i]
             dr -= L * np.round(dr / L)
             if np.linalg.norm(dr) >= FENE_R0:
+                pos_uw[j] = old_pos_j
                 return False
             bond_set.add(key)
             valence_cur[i] += 1
             valence_cur[j] += 1
+            bonded[i] = True
+            bonded[j] = True
             if i in cl_set or j in cl_set:
                 crosslink_bonds.append((i, j))
             else:
@@ -223,6 +235,7 @@ class NetworkBuilder:
 
         self.backbone_bonds = backbone_bonds
         self.crosslink_bonds = crosslink_bonds
+        self.positions = pos_uw   # unwrapped — bonded atoms close in real space
         self._update_degree()
 
     def _cell_list(self, r_cut):
