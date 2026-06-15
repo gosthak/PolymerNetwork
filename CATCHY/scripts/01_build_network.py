@@ -204,6 +204,22 @@ def main():
     sim.context.setPositions([mm.Vec3(*p) for p in pos])
     ok, _ = check_energy(sim, "before minimization", builder)
 
+    # Remove any bonds >= R0 (PBC) before minimization to prevent NaN
+    # These are rare (~6/3000) crosslink bonds that span large distances
+    from src.potentials import FENE_R0
+    bad_bond_indices = []
+    for idx, (i, j) in enumerate(builder.all_bonds):
+        dr = pos[i] - pos[j]
+        dr -= builder.L * np.round(dr / builder.L)
+        if np.linalg.norm(dr) >= FENE_R0:
+            bad_bond_indices.append(idx)
+    if bad_bond_indices:
+        print(f"  Removing {len(bad_bond_indices)} bonds >= R0 before minimization")
+        for idx in bad_bond_indices:
+            p1, p2, params = fene.getBondParameters(idx)
+            fene.setBondParameters(idx, p1, p2, [0.0])
+        fene.updateParametersInContext(sim.context)
+
     sim.minimizeEnergy(maxIterations=10000)
     ok, _ = check_energy(sim, "after minimization", builder)
     if not ok:
