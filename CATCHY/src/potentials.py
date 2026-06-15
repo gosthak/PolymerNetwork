@@ -56,6 +56,7 @@ def add_fene(system, bonds, k=FENE_K, r0=FENE_R0):
         f"0)"
     )
     fene = CustomBondForce(energy_expr)
+    fene.setUsesPeriodicBoundaryConditions(True)   # minimum image for bonded pairs
     fene.addPerBondParameter("k_bond")
     for (i, j) in bonds:
         fene.addBond(i, j, [k])
