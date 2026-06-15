@@ -80,6 +80,12 @@ class NetworkBuilder:
             print(f"  bond lengths     = min={bl.min():.3f}  "
                   f"mean={bl.mean():.3f}  max={bl.max():.3f}  (R0={FENE_R0})")
             print(f"  bonds >= R0      = {int((bl >= FENE_R0).sum())}  ← should be 0")
+        # Strand length distribution
+        sl = self._strand_lengths()
+        if sl is not None and len(sl) > 0:
+            import numpy as np
+            print(f"  strand lengths   = mean={np.mean(sl):.2f}  "
+                  f"std={np.std(sl):.2f}  (target <n>={self.mean_strand})")
 
     # ------------------------------------------------------------------ #
     #  Step 1: lattice placement                                           #
@@ -175,7 +181,7 @@ class NetworkBuilder:
             dr = pos_uw[j] - pos_uw[i]
             dr -= L * np.round(dr / L)
             r = np.linalg.norm(dr)
-            if r >= FENE_R0:
+            if r >= FENE_R0 * 0.95:   # strict threshold — well below singularity
                 pos_uw[j] = old_pos_j   # rollback
                 return False
             bond_set.add(key)
@@ -418,6 +424,38 @@ class NetworkBuilder:
         for u, v in self.all_bonds:
             deg[u] += 1; deg[v] += 1
         self._degree = deg
+
+    def _strand_lengths(self):
+        """Compute lengths of backbone strands between crosslinks."""
+        from collections import defaultdict
+        import numpy as np
+        if not self.backbone_bonds:
+            return None
+        adj = defaultdict(list)
+        for u, v in self.backbone_bonds:
+            adj[u].append(v)
+            adj[v].append(u)
+        cl_set = self._cl_set
+        visited = set()
+        strand_lengths = []
+        for cl in self.crosslink_ids:
+            for nbr in adj[cl]:
+                if nbr in cl_set:
+                    continue
+                key = (min(cl, nbr), max(cl, nbr))
+                if key in visited:
+                    continue
+                visited.add(key)
+                length = 1
+                prev, cur = cl, nbr
+                while cur not in cl_set:
+                    nexts = [n for n in adj[cur] if n != prev]
+                    if not nexts:
+                        break
+                    prev, cur = cur, nexts[0]
+                    length += 1
+                strand_lengths.append(length)
+        return np.array(strand_lengths) if strand_lengths else None
 
     def _bond_lengths(self):
         if not self.all_bonds or self.positions is None:
