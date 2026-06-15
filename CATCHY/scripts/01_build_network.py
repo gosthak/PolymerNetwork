@@ -5,7 +5,7 @@
 Steps:
   1. Generate network topology (NetworkBuilder)
   2. Build OpenMM system with FENE bonds
-     - positions are unwrapped inside NetworkBuilder so bonds are
+     - FENE uses PBC so wrapped lattice positions work fine
        close WITHOUT PBC (required by CustomBondForce)
   3. Energy minimization
   4. NVT equilibration (staged dt ramp)
@@ -166,12 +166,12 @@ def main():
 
     N   = builder.N_m   # may be less than N_m after pruning
     L   = builder.L
-    pos = builder.positions.copy()   # unwrapped by NetworkBuilder
+    pos = builder.positions.copy()   # wrapped lattice positions
 
     # Verify no bonds exceed R0 without PBC
     bl = builder._bond_lengths()
     n_bad = int((bl >= 1.5).sum())
-    print(f"\n  Bond check (unwrapped): min={bl.min():.4f}  max={bl.max():.4f}  "
+    print(f"\n  Bond check: min={bl.min():.4f}  max={bl.max():.4f}  "
           f"bonds>=R0: {n_bad}  ← should be 0")
     if n_bad > 0:
         print("  WARNING: some bonds still >= R0. Attempting to fix...")
