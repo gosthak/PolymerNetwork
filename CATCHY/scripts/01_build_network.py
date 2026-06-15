@@ -202,6 +202,22 @@ def main():
     # ------------------------------------------------------------------
     print("\n[3/5] Energy minimization ...")
     sim.context.setPositions([mm.Vec3(*p) for p in pos])
+    print("\nChecking bonds BEFORE minimization")
+
+    bad = []
+
+    for idx, (i, j) in enumerate(builder.all_bonds):
+      dr = pos[i] - pos[j]
+      dr -= L * np.round(dr / L)
+      r = np.linalg.norm(dr)
+
+      if r >= 1.49:
+        bad.append((idx, i, j, r))
+
+    print(f"Bad bonds before minimization: {len(bad)}")
+
+    for idx, i, j, r in bad[:20]:
+      print(f"  bond {idx}: ({i},{j}) r_pbc={r:.4f}")
     ok, _ = check_energy(sim, "before minimization", builder)
 
     # Remove any bonds >= R0 (PBC) before minimization to prevent NaN
