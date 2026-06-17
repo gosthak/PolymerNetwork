@@ -19,12 +19,6 @@ to Paper 1, so enzymatic enhancement is cleanly isolated by comparing active vs 
 > How do enzyme size (confinement C = σ_E/λ), polymer affinity (attractive vs repulsive),
 > and enzymatic activity (k_cat) collectively control enzyme progression through the matrix?
 
-### Predicted phenomenology
-| Regime       | Passive (k_cat = 0)                    | Active (k_cat > 0)                         |
-|--------------|----------------------------------------|--------------------------------------------|
-| C ≲ 1 (free) | D follows Cai–Rubinstein               | Cleavage negligible — D_active ≈ D_passive |
-| 1 ≲ C ≲ 3   | Activated hopping, large α₂            | Cleavage accelerates hops                  |
-| C ≳ 3        | Near-zero D, extremely heterogeneous   | Cleavage opens new paths — D_active >> D_passive |
 
 ---
 
@@ -51,15 +45,6 @@ CATCHY/
 │   ├── 02_embed_enzymes.py       # Insert enzymes, push-off, equilibrate
 │   ├── 03_production.py          # Production run with cleavage loop
 │   └── run_all.sh                # Full pipeline launcher
-├── analysis/
-│   ├── msd.py                    # MSD, D(C), β(t), theory fits
-│   ├── van_hove.py               # G_s, G_d, hopping detection
-│   ├── non_gaussian.py           # α₂(t)
-│   ├── pore_size.py              # Pore-size distribution P(r), ξ(t)
-│   ├── degradation.py            # Bond survival S(t), D_active/D_passive
-│   └── plot_all.py               # All figures A–I
-├── notebooks/
-│   └── results_overview.ipynb
 └── tests/
     └── test_potentials.py
 ```
@@ -101,9 +86,9 @@ bash run_all.sh --config ../configs/extreme_confinement.yaml
 Or step by step:
 
 ```bash
-python 01_build_network.py --config ../configs/strong_confinement.yaml
-python 02_embed_enzymes.py --config ../configs/strong_confinement.yaml
-python 03_production.py    --config ../configs/strong_confinement.yaml
+python 01_build_network.py --config ../configs/default.yaml
+python 02_embed_enzymes.py --config ../configs/default.yaml
+python 03_production.py    --config ../configs/default.yaml
 ```
 
 ---
@@ -188,13 +173,5 @@ output/
 ├── traj_{label}.h5             # trajectory: positions + active_bonds array
 ├── msd_{label}.npz             # enzyme MSD vs time
 ├── survival_{label}.npz        # bond survival S(t)
-└── figs/
-    ├── fig_A_msd.pdf
-    ├── fig_B_diffusion.pdf
-    ├── fig_C_beta.pdf
-    ├── fig_D_vanhove.pdf
-    ├── fig_E_nongaussian.pdf
-    ├── fig_F_survival.pdf
-    └── fig_G_enhancement.pdf
 ```
 
