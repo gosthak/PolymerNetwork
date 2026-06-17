@@ -8,12 +8,11 @@
 
 ## Scientific context
 
-It directly extends **Sorichetti, Hugouvieux & Kob, *Macromolecules* 2021** (Paper 1), which
+It directly extends **Sorichetti, Hugouvieux & Kob, *Macromolecules* 2021** (manuscript), which
 studied passive nanoparticle diffusion in a permanently cross-linked polymer network.
 
 **Key extension:** NPs become **enzymes** that *cleave* network bonds upon contact.  
-All other physics (Kremer-Grest network, potentials, observables, analysis) is kept identical
-to Paper 1, so enzymatic enhancement is cleanly isolated by comparing active vs passive runs.
+All other physics (Kremer-Grest network, potentials, observables, analysis) is kept identical, so enzymatic enhancement is cleanly isolated by comparing active vs passive runs.
 
 ### Central scientific question
 > How do enzyme size (confinement C = σ_E/λ), polymer affinity (attractive vs repulsive),
@@ -35,11 +34,11 @@ CATCHY/
 │   └── extreme_confinement.yaml  # C ≳ 3
 ├── src/
 │   ├── __init__.py
-│   ├── potentials.py             # WCA, FENE, expanded-LJ (Paper 1 eqs 2–4)
+│   ├── potentials.py             # WCA, FENE, expanded-LJ (Manuscript eqs 2–4)
 │   ├── network_builder.py        # Flory–Stockmayer polydisperse network
 │   ├── enzyme_system.py          # Full OpenMM system assembly
 │   ├── cleavage.py               # Stochastic enzymatic bond cleavage
-│   └── utils.py                  # HDF5 writer, checkpointing, Paper 1 ref values
+│ 
 ├── scripts/
 │   ├── 01_build_network.py       # Build + equilibrate network, compute λ
 │   ├── 02_embed_enzymes.py       # Insert enzymes, push-off, equilibrate
@@ -95,7 +94,7 @@ python 03_production.py    --config ../configs/default.yaml
 
 ## Physics model
 
-### Polymer network — identical to Paper 1 (Sorichetti et al. 2021)
+### Polymer network
 
 Kremer–Grest bead-spring model in LJ reduced units (σ=1, ε=1, m=1, τ*=1).
 
@@ -116,7 +115,7 @@ Equilibrium bond length after WCA+FENE balance: r_eq ≈ 0.96 σ.
 
 **Network topology — cubic lattice + Flory–Stockmayer:**
 
-Network construction differs from Paper 1 (which uses patchy-particle self-assembly)
+Network construction differs from the manuscript (which uses patchy-particle self-assembly)
 but yields the same Kremer-Grest physics after equilibration:
 
 1. Place N_m beads on a cubic lattice with **fixed spacing a = 0.8 R₀ = 1.2 σ**.  
@@ -131,7 +130,7 @@ but yields the same Kremer-Grest physics after equilibration:
 
 Parameters: c = 0.1, γ_m = 0.1 τ*⁻¹, T = 1.0 ε/k_B, dt = 0.006 τ*.
 
-### Enzyme–monomer interaction — Paper 1 eq. 4 (expanded LJ)
+### Enzyme–monomer interaction — eq. 4 (expanded LJ)
 
 ```
 U(r) = 4ε [ (σ_m/(r−Δ))^12 − (σ_m/(r−Δ))^6 ] − E_c,   r < r_c + Δ
@@ -179,9 +178,9 @@ C = σ_E / λ
 ```
 
 λ = dynamic localization length measured from the long-time MSD plateau of all network
-monomers after equilibration (Paper 1 definition, averaged over all beads).
+monomers after equilibration (averaged over all beads).
 
-Reference values from Paper 1 Table 1:
+Reference values from the manuscript Table 1:
 
 | ρ₀    | λ [σ] |
 |-------|-------|
@@ -189,8 +188,8 @@ Reference values from Paper 1 Table 1:
 | 0.290 | 2.01  |
 | 0.375 | 1.51  |
 
-Note: due to pruning of isolated beads, effective density ρ_eff < ρ₀.
-λ is therefore measured in situ and may differ from Paper 1 Table 1.
+Note: due to pruning of isolated beads, effective density ρ_eff is not equal to ρ₀.
+λ is therefore measured in situ and may differ from the Table 1.
 
 ---
 
