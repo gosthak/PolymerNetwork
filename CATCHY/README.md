@@ -142,26 +142,6 @@ C = σ_E / λ
 
 ---
 
-## Observables
-
-### Reproduced from Paper 1
-| Observable | Script | Description |
-|------------|--------|-------------|
-| MSD(t)     | analysis/msd.py | Enzyme mean-square displacement |
-| D_E(C)     | analysis/msd.py | Long-time diffusion coefficient vs C |
-| β(t)       | analysis/msd.py | Local subdiffusion exponent |
-| G_s(r,t)   | analysis/van_hove.py | Self van Hove function |
-| α₂(t)      | analysis/non_gaussian.py | Non-Gaussian parameter |
-
-### New CATCHY observables
-| Observable         | Script | Description |
-|--------------------|--------|-------------|
-| S(t)               | analysis/degradation.py | Bond survival fraction |
-| D_active/D_passive | analysis/degradation.py | Enzymatic mobility enhancement vs C |
-| ξ(t)               | analysis/pore_size.py | Mean mesh size during degradation |
-
----
-
 ## Output files
 
 For each label `sigma{X}_{attractive|repulsive}_{active|passive}`:
