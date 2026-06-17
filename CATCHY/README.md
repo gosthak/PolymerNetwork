@@ -111,8 +111,6 @@ U_WCA(r) = 4ε[(σ/r)^12 − (σ/r)^6] + ε,   r < 2^(1/6)σ
 U_FENE(r) = −(k R₀²/2) ln[1 − (r/R₀)²],   k = 30 ε/σ², R₀ = 1.5 σ
 ```
 
-Equilibrium bond length after WCA+FENE balance: r_eq ≈ 0.96 σ.
-
 **Network topology — cubic lattice + Flory–Stockmayer:**
 
 Network construction differs from the manuscript (which uses patchy-particle self-assembly)
