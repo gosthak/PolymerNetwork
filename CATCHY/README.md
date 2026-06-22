@@ -1,4 +1,4 @@
-# CATCHY — Catching Enzymes in Action
+# Catching Enzymes in Action
 **Coarse-grained MD simulations of enzyme-polymer systems**
 
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/)
